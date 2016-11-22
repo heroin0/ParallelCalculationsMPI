@@ -3,40 +3,42 @@
 #include <vector>
 #include <string>
 #include <cmath>
-//#include <mpi.h>
-//#include <chrono>
+#include <mpi.h>
+#include <chrono>
 #include <ctime>
-//#include <ppl.h>
+#include <ppl.h>
 using namespace std;
 //метод наискорейшего спуска
-//using namespace std::chrono;
+using namespace std::chrono;
 
 class GravimetryTask
 {
 private:
-	vector<vector<vector<double> > >	firstSurfacePoints, secondSurfacePoints;
+	vector<vector<vector<double> > >	firstSurfacePoints, secondSurfacePoints, rightPartPoints;
+
 	double dx;
 	double dy;
 	double gravityConst;// 6.67408e-11;
 	int gridPointsAmount;
 	int sqaredGridPointsAmount;
 public:
-	GravimetryTask(string firstSurfaceFile, string secondSurfaceFile)
+	GravimetryTask(string firstSurfaceFile, string secondSurfaceFile, string rightPartFile)
 	{
 		dx = 204.082;
 		dy = 204.082;
 		gravityConst = 6.6708e-3;// 6.67408e-11;
 		gridPointsAmount = 50;
-		sqaredGridPointsAmount = 2500;
+		sqaredGridPointsAmount = 2500;//константные переменные класса
 		const int dimensions = 3;
+
 		readDataFile(firstSurfaceFile, dimensions, firstSurfacePoints);
 		readDataFile(secondSurfaceFile, dimensions, secondSurfacePoints);
-		
+		readDataFile(secondSurfaceFile, dimensions, rightPartPoints);
 		vector<vector<double> > equationMatrix, transposedMatrix, AonATransposed, z(1, vector<double>(sqaredGridPointsAmount, 0));
 		calculateMatrix(equationMatrix);
 		transpose(equationMatrix, transposedMatrix);
-		//parallelMultiplicate(equationMatrix, transposedMatrix, AonATransposed);
-		multiplicate(equationMatrix, transposedMatrix, AonATransposed);
+		parallelMultiplicate(equationMatrix, transposedMatrix, AonATransposed);
+		//multiplicate(equationMatrix, transposedMatrix, AonATransposed);
 	}
 
 	void transpose(vector<vector<double> > &inputMatrix, vector<vector<double> > &result)
@@ -61,18 +63,18 @@ public:
 		swap(tmpMatrix, result);
 	}
 
-	//void parallelMultiplicate(vector<vector<double> > &firstMatrix, vector<vector<double> > &secondMatrix, vector<vector<double> > &result)
-	//{
-	//	const int m1 = firstMatrix.size(), m2 = secondMatrix.size(), n1 = firstMatrix[0].size(), n2 = secondMatrix[0].size();
-	//	vector<vector<double> > tmpMatrix(m1, vector<double>(n2, 0));
-	//	Concurrency::parallel_for(0, m1, [&](int i)
-	//	{
-	//		for (int j = 0; j < n2; j++)
-	//			for (int k = 0; k < m2; k++)
-	//				tmpMatrix[i][j] += firstMatrix[i][k] * secondMatrix[k][j];
-	//	});
-	//	swap(tmpMatrix, result);
-	//}
+	void parallelMultiplicate(vector<vector<double> > &firstMatrix, vector<vector<double> > &secondMatrix, vector<vector<double> > &result)
+	{
+		const int m1 = firstMatrix.size(), m2 = secondMatrix.size(), n1 = firstMatrix[0].size(), n2 = secondMatrix[0].size();
+		vector<vector<double> > tmpMatrix(m1, vector<double>(n2, 0));
+		Concurrency::parallel_for(0, m1, [&](int i)
+		{
+			for (int j = 0; j < n2; j++)
+				for (int k = 0; k < m2; k++)
+					tmpMatrix[i][j] += firstMatrix[i][k] * secondMatrix[k][j];
+		});
+		swap(tmpMatrix, result);
+	}
 
 	void subtraction(vector<vector<double> > &firstMatrix, vector<vector<double> > &secondMatrix, vector<vector<double> > &result)
 	{
@@ -113,7 +115,7 @@ public:
 			{
 				for (int k = 0; (k < dimensions) && (!myFile.eof()); k++)
 				{
-					myFile >> tmpVector[i][j][k];
+					myFile >> tmpVector[j][i][k];
 				}
 			}
 		}
@@ -152,13 +154,13 @@ public:
 
 int main(int argc, char* argv[])
 {
-	//MPI_Init(&argc, &argv);
-	//steady_clock::time_point t1 = steady_clock::now();
-	GravimetryTask g("hh1.dat", "hh2.dat");
-	/*steady_clock::time_point t2 = steady_clock::now();
+	MPI_Init(&argc, &argv);
+	steady_clock::time_point t1 = steady_clock::now();
+	GravimetryTask g("hh1.dat", "hh2.dat", "f_1sq.dat");
+	steady_clock::time_point t2 = steady_clock::now();
 	duration<double> time_span = duration_cast<duration<double> >(t2 - t1);
-	cout << "It took me " << time_span.count() << " seconds." << endl;;*/
-	//MPI_Finalize();
+	cout << "It took me " << time_span.count() << " seconds." << endl;;
+	MPI_Finalize();
 	return 0;
 }
 
