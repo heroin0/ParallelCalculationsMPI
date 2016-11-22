@@ -6,7 +6,7 @@
 #include <mpi.h>
 #include <chrono>
 #include <ctime>
-
+#include <ppl.h>
 using namespace std;
 //метод наискорейшего спуска
 using namespace std::chrono;
@@ -16,7 +16,7 @@ class GravimetryTask
 private:
 	vector<vector<vector<double>>>	firstSurfacePoints, secondSurfacePoints;
 	double dx = 204.082;
-	double dy = 204.082;//It is possible that yo have to calculate it dynamically. Or not.
+	double dy = 204.082;
 	double gravityConst = 6.6708e-3;// 6.67408e-11;
 	int gridPointsAmount = 50;
 	int sqaredGridPointsAmount = 2500;
@@ -30,26 +30,42 @@ public:
 		calculateMatrix(equationMatrix);
 		vector<vector<double>> transposedMatrix;
 		transpose(equationMatrix, transposedMatrix);
+		vector<vector<double>> AonATransposed;
+		parallelMultiplicate(equationMatrix, transposedMatrix, AonATransposed);
 	}
 
 	void transpose(vector<vector<double>> &inputMatrix, vector<vector<double>> &result)
 	{
-		vector<vector<double>> tmpVector(gridPointsAmount*gridPointsAmount, vector<double>(gridPointsAmount*gridPointsAmount));
+		const int m = inputMatrix.size(), n = inputMatrix[0].size();
+		vector<vector<double>> tmpVector(m, vector<double>(n));
 		//так себе транспозици€
-		for (int i = 0; i < sqaredGridPointsAmount; i++)
-			for (int j = 0; j < sqaredGridPointsAmount; j++)
+		for (int i = 0; i < m; i++)
+			for (int j = 0; j < n; j++)
 				tmpVector[i][j] = inputMatrix[j][i];
 		swap(tmpVector, result);
 	}
 
-	void multiplicate(vector<vector<double>> &firstMatrix, vector<vector<double>> &secondMatrix, vector<vector<double>> &result)//переписать аккуратно, с учетом размерностей.
+	void multiplicate(vector<vector<double>> &firstMatrix, vector<vector<double>> &secondMatrix, vector<vector<double>> &result)
 	{
-		int m1 = firstMatrix.size() , m2 = secondMatrix.size(),n1=firstMatrix[0].size(), n2 = secondMatrix[0].size();
-		vector<vector<double>> tmpMatrix(n1, vector<double>(m2,0));
-		for (int i = 0; i < n1; i++)
-				for (int j = 0; j < n1; j++)
-					for (int k = 0; k < m1; k++)
-							tmpMatrix[i][j] +=firstMatrix[i][k]*secondMatrix[k][j] ;
+		const int m1 = firstMatrix.size(), m2 = secondMatrix.size(), n1 = firstMatrix[0].size(), n2 = secondMatrix[0].size();
+		vector<vector<double>> tmpMatrix(m1, vector<double>(n2, 0));
+		for (int i = 0; i < m1; i++)
+			for (int j = 0; j < n2; j++)
+				for (int k = 0; k < m2; k++)
+					tmpMatrix[i][j] += firstMatrix[i][k] * secondMatrix[k][j];
+		swap(tmpMatrix, result);
+	}
+
+	void parallelMultiplicate(vector<vector<double>> &firstMatrix, vector<vector<double>> &secondMatrix, vector<vector<double>> &result)
+	{
+		const int m1 = firstMatrix.size(), m2 = secondMatrix.size(), n1 = firstMatrix[0].size(), n2 = secondMatrix[0].size();
+		vector<vector<double>> tmpMatrix(m1, vector<double>(n2, 0));
+		Concurrency::parallel_for(0, m1, [&](int i)
+		{
+			for (int j = 0; j < n2; j++)
+				for (int k = 0; k < m2; k++)
+					tmpMatrix[i][j] += firstMatrix[i][k] * secondMatrix[k][j];
+		});
 		swap(tmpMatrix, result);
 	}
 
@@ -66,21 +82,20 @@ public:
 	double vectorNorm(vector<vector<double>> &matrix)
 	{
 		double result = 0;
-		for (int i = 0; i < matrix.size(); i++)
-			result += matrix[0][i];
-		return result;
+		for (unsigned int i = 0; i < matrix.size(); i++)
+			result += matrix[0][i] * matrix[0][i];
+		return sqrt(result);
 	}
 
 	void multiplicate(vector<vector<double>> &matrix, double number, vector<vector<double>> &result)
 	{
-		double m= matrix.size(), n= matrix[0].size();
+		const int m = matrix.size(), n = matrix[0].size();
 		vector<vector<double>> tmpVector(m, vector<double>(n));
 		for (int i = 0; i < m; i++)
 			for (int j = 0; j < n; j++)
 				tmpVector[i][j] = matrix[i][j] * number;
 		swap(result, tmpVector);
 	}
-
 
 	void readDataFile(string fileName, int dimensions, vector<vector<vector<double>>> &result)//should be faster
 	{
@@ -113,7 +128,7 @@ public:
 
 					for (int j = 0; j < gridPointsAmount; j++)
 					{//gromozdko 
-						tmpVector[gridPointsAmount*k + l][gridPointsAmount*i + j] = calculateIntegral(firstSurfacePoints[k][l][0], firstSurfacePoints[k][l][1], firstSurfacePoints[i][j][0], firstSurfacePoints[i][j][1], firstSurfacePoints[i][j][2],secondSurfacePoints[i][j][2]);
+						tmpVector[gridPointsAmount*k + l][gridPointsAmount*i + j] = calculateIntegral(firstSurfacePoints[k][l][0], firstSurfacePoints[k][l][1], firstSurfacePoints[i][j][0], firstSurfacePoints[i][j][1], firstSurfacePoints[i][j][2], secondSurfacePoints[i][j][2]);
 					}
 			}
 		}
@@ -129,14 +144,11 @@ public:
 		return result;
 	}
 };
+
 int main(int argc, char* argv[])
 {
 	MPI_Init(&argc, &argv);
 	steady_clock::time_point t1 = steady_clock::now();
-	//int dimensions = 3;
-	//vector<vector<vector<double>>> vec(50, vector<vector<double>>(50, vector<double>(3)));
-	//cout << vec[1][3][2];
-	//GravimetryTask g("f_1sq.dat","f_2sq_cl.dat"); //(—тас) это правые части, use hh files instead, Luke!
 	GravimetryTask g("hh1.dat", "hh2.dat");
 	steady_clock::time_point t2 = steady_clock::now();
 	duration<double> time_span = duration_cast<duration<double>>(t2 - t1);
@@ -145,42 +157,4 @@ int main(int argc, char* argv[])
 	return 0;
 }
 
-//vector<vector<double>>  readDataFile(string fileName, int dimensions)//easy way
-//{
-//	vector<vector<double>> result(dimensions, vector<double>());
-//	ifstream  myFile;
-//	myFile.open(fileName);
-//	vector<double> a(dimensions);//bad
-//	for (int i = 0;;i++)
-//	{
-//		myFile >> a[0] >> a[1] >> a[2];
-//		if (myFile.eof()) break;
-//		for (int j = 0;j < dimensions;j++)
-//			result[j].push_back(a[j]);
-//	}
-//	myFile.close();
-//	return result;
-//}
-
-//void readDataFile(const string fileName, const int dimensions, vector<vector<double>> &result)//should be faster
-//{
-//	vector<vector<double>> tmpVector(dimensions, vector<double>());
-//	ifstream  myFile;
-//	myFile.open(fileName);
-//	vector<double> a(dimensions);//bad
-//	for (int i = 0;;i++)
-//	{
-//		for (int k = 0;(k < dimensions) && (!myFile.eof());k++)
-//		{
-//			myFile >> a[k];
-//		}
-//		if (myFile.eof())
-//		{
-//			break;
-//		}
-//		for (int j = 0;j < dimensions;j++)
-//			tmpVector[j].push_back(a[j]);
-//	}
-//	myFile.close();
-//	result.swap(tmpVector);
-//}
+//GravimetryTask g("f_1sq.dat","f_2sq_cl.dat"); //(—тас) это правые части, use hh files instead, Luke!
