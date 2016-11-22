@@ -14,13 +14,14 @@ using namespace std::chrono;
 class GravimetryTask
 {
 private:
-	vector<vector<vector<double> > >	firstSurfacePoints, secondSurfacePoints, rightPartPoints;
-
+	vector<vector<vector<double> > >	firstSurfacePoints, secondSurfacePoints;
+	vector<vector<double> > b;
 	double dx;
 	double dy;
 	double gravityConst;// 6.67408e-11;
 	int gridPointsAmount;
 	int sqaredGridPointsAmount;
+	double myEpsilon;
 public:
 	GravimetryTask(string firstSurfaceFile, string secondSurfaceFile, string rightPartFile)
 	{
@@ -29,16 +30,29 @@ public:
 		gravityConst = 6.6708e-3;// 6.67408e-11;
 		gridPointsAmount = 50;
 		sqaredGridPointsAmount = 2500;//константные переменные класса
+		myEpsilon = 0.000001;
 		const int dimensions = 3;
 
 		readDataFile(firstSurfaceFile, dimensions, firstSurfacePoints);
 		readDataFile(secondSurfaceFile, dimensions, secondSurfacePoints);
-		readDataFile(secondSurfaceFile, dimensions, rightPartPoints);
-		vector<vector<double> > equationMatrix, transposedMatrix, AonATransposed, z(1, vector<double>(sqaredGridPointsAmount, 0));
+		readDataFile(rightPartFile, dimensions,2, b);
+
+
+		vector<vector<double> > equationMatrix, transposedMatrix, AonATransposed, z(1, vector<double>(sqaredGridPointsAmount, 0)), tempMatrix, b(1, vector<double>(sqaredGridPointsAmount, 0));
+
+
 		calculateMatrix(equationMatrix);
 		transpose(equationMatrix, transposedMatrix);
 		parallelMultiplicate(equationMatrix, transposedMatrix, AonATransposed);
-		//multiplicate(equationMatrix, transposedMatrix, AonATransposed);
+		parallelMultiplicate(equationMatrix, z, tempMatrix);
+		double normB = vectorNorm(b);
+		subtraction(tempMatrix, b, tempMatrix);
+
+			while (vectorNorm(tempMatrix) / normB >= myEpsilon)
+			{
+				cout << 1;
+			}
+				//multiplicate(equationMatrix, transposedMatrix, AonATransposed);
 	}
 
 	void transpose(vector<vector<double> > &inputMatrix, vector<vector<double> > &result)
@@ -104,7 +118,7 @@ public:
 		swap(result, tmpVector);
 	}
 
-	void readDataFile(string fileName, int dimensions, vector<vector<vector<double> > > &result)//should be faster
+	void readDataFile(string fileName, int dimensions, vector<vector<vector<double> > > &result)
 	{
 		vector<vector<vector<double> > >  tmpVector(gridPointsAmount, vector<vector<double> >(gridPointsAmount, vector<double>(dimensions)));
 		ifstream  myFile;
@@ -117,6 +131,26 @@ public:
 				{
 					myFile >> tmpVector[j][i][k];
 				}
+			}
+		}
+		myFile.close();
+		result.swap(tmpVector);
+	}
+
+	void readDataFile(string fileName, int dimensions, int targetCollar, vector<vector<double> >  &result)//should be faster
+	{
+		vector<vector<double> >  tmpVector(1, vector<double>(sqaredGridPointsAmount));
+		ifstream  myFile;
+		string dump;
+		myFile.open(fileName.c_str());
+		for (int i = 0; i < sqaredGridPointsAmount; i++)
+		{
+			for (int j = 0; j < dimensions&& (!myFile.eof()); j++)
+			{
+				if (j == targetCollar)
+					myFile >> tmpVector[0][i];
+				else
+					myFile >> dump;
 			}
 		}
 		myFile.close();
@@ -158,7 +192,7 @@ int main(int argc, char* argv[])
 	steady_clock::time_point t1 = steady_clock::now();
 	GravimetryTask g("hh1.dat", "hh2.dat", "f_1sq.dat");
 	steady_clock::time_point t2 = steady_clock::now();
-	duration<double> time_span = duration_cast<duration<double> >(t2 - t1);
+	duration<double> time_span = duration_cast<duration<double>>(t2 - t1);
 	cout << "It took me " << time_span.count() << " seconds." << endl;;
 	MPI_Finalize();
 	return 0;
