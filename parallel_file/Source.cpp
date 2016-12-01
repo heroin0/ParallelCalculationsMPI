@@ -35,22 +35,24 @@ public:
 
 		readDataFile(firstSurfaceFile, dimensions, firstSurfacePoints);
 		readDataFile(secondSurfaceFile, dimensions, secondSurfacePoints);
-		readDataFile(rightPartFile, dimensions,2, b);
-
-
-		vector<vector<double> > equationMatrix, transposedMatrix, AonATransposed, z(1, vector<double>(sqaredGridPointsAmount, 0)), tempMatrix, b(1, vector<double>(sqaredGridPointsAmount, 0));
+		//readDataFile(rightPartFile, dimensions,2, b);
+		readBFile(rightPartFile, dimensions, 2);
+		vector<vector<double> > equationMatrix, transposedMatrix, AonATransposed, z(sqaredGridPointsAmount, vector<double>(1, 0)), tempMatrix1,tempMatrix2, b(sqaredGridPointsAmount, vector<double>(1, 0));
 
 
 		calculateMatrix(equationMatrix);
 		transpose(equationMatrix, transposedMatrix);
-		parallelMultiplicate(equationMatrix, transposedMatrix, AonATransposed);
-		parallelMultiplicate(equationMatrix, z, tempMatrix);
+		//parallelMultiplicate(equationMatrix, transposedMatrix, AonATransposed);
+		parallelMultiplicate(equationMatrix, z, tempMatrix1);
 		double normB = vectorNorm(b);
-		subtraction(tempMatrix, b, tempMatrix);
-
-			while (vectorNorm(tempMatrix) / normB >= myEpsilon)
+		subtraction(tempMatrix1, b, tempMatrix2);
+		int iterationNumber = 0;
+		double stoppingPoint = vectorNorm(tempMatrix2) / normB;
+			while (stoppingPoint >= myEpsilon)
 			{
-				cout << 1;
+
+				iterationNumber++;
+				cout << iterationNumber;
 			}
 				//multiplicate(equationMatrix, transposedMatrix, AonATransposed);
 	}
@@ -79,7 +81,8 @@ public:
 
 	void parallelMultiplicate(vector<vector<double> > &firstMatrix, vector<vector<double> > &secondMatrix, vector<vector<double> > &result)
 	{
-		const int m1 = firstMatrix.size(), m2 = secondMatrix.size(), n1 = firstMatrix[0].size(), n2 = secondMatrix[0].size();
+		const int m1 = firstMatrix.size(), n1 = firstMatrix[0].size();
+		const int m2 = secondMatrix.size(), n2 = secondMatrix[0].size();
 		vector<vector<double> > tmpMatrix(m1, vector<double>(n2, 0));
 		Concurrency::parallel_for(0, m1, [&](int i)
 		{
@@ -95,8 +98,10 @@ public:
 		int m = firstMatrix.size(), n = firstMatrix[0].size();
 		vector<vector<double> > tmpMatrix(m, vector<double>(n, 0));
 		for (int i = 0; i < m; i++)
+		{
 			for (int j = 0; j < n; j++)
 				tmpMatrix[i][j] = firstMatrix[i][j] - secondMatrix[i][j];
+		}
 		swap(tmpMatrix, result);
 	}
 
@@ -104,7 +109,7 @@ public:
 	{
 		double result = 0;
 		for (unsigned int i = 0; i < matrix.size(); i++)
-			result += matrix[0][i] * matrix[0][i];
+			result += matrix[i][0] * matrix[i][0];
 		return sqrt(result);
 	}
 
@@ -116,6 +121,28 @@ public:
 			for (int j = 0; j < n; j++)
 				tmpVector[i][j] = matrix[i][j] * number;
 		swap(result, tmpVector);
+	}
+
+
+	void readBFile(string fileName, int dimensions, int targetCollar)
+	{
+		b = vector<vector<double> >(sqaredGridPointsAmount, vector<double>(1));
+		ifstream  myFile;
+		double dump;
+		myFile.open(fileName.c_str());
+		for (int i = 0; i < sqaredGridPointsAmount; i++)
+		{
+			for (int j = 0; j < dimensions && (!myFile.eof()); j++)
+			{
+				if (j == targetCollar)
+					myFile >> b[i][0];
+				else
+					myFile >> dump;
+			}
+		}
+		myFile.close();
+		return;
+
 	}
 
 	void readDataFile(string fileName, int dimensions, vector<vector<vector<double> > > &result)
@@ -137,25 +164,29 @@ public:
 		result.swap(tmpVector);
 	}
 
-	void readDataFile(string fileName, int dimensions, int targetCollar, vector<vector<double> >  &result)//should be faster
+	void readDataFile(string fileName, int dimensions, int targetCollar, vector<vector<double> > &result)//should be faster
 	{
-		vector<vector<double> >  tmpVector(1, vector<double>(sqaredGridPointsAmount));
+		
+		vector<vector<double> >  tmpVector(sqaredGridPointsAmount, vector<double>(1,0));
 		ifstream  myFile;
-		string dump;
+		double dump;
 		myFile.open(fileName.c_str());
 		for (int i = 0; i < sqaredGridPointsAmount; i++)
 		{
 			for (int j = 0; j < dimensions&& (!myFile.eof()); j++)
 			{
 				if (j == targetCollar)
-					myFile >> tmpVector[0][i];
+					myFile >> tmpVector[i][0];
 				else
 					myFile >> dump;
 			}
 		}
 		myFile.close();
 		result.swap(tmpVector);
+		std::cout << "pew" << endl;
+		
 	}
+
 
 	void calculateMatrix(vector<vector<double> > &result)
 	{
