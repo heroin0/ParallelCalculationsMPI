@@ -13,18 +13,21 @@ using namespace std::chrono;
 
 class GravimetryTask
 {
-private:
+	private:
 	vector<vector<vector<double> > >	firstSurfacePoints, secondSurfacePoints;
 	vector<vector<double> > b;
+	
 	double dx;
 	double dy;
 	double gravityConst;// 6.67408e-11;
 	int gridPointsAmount;
 	int sqaredGridPointsAmount;
 	double myEpsilon;
+
 public:
 	GravimetryTask(string firstSurfaceFile, string secondSurfaceFile, string rightPartFile)
 	{
+
 		dx = 204.082;
 		dy = 204.082;
 		gravityConst = 6.6708e-3;// 6.67408e-11;
@@ -35,26 +38,58 @@ public:
 
 		readDataFile(firstSurfaceFile, dimensions, firstSurfacePoints);
 		readDataFile(secondSurfaceFile, dimensions, secondSurfacePoints);
-		//readDataFile(rightPartFile, dimensions,2, b);
-		readBFile(rightPartFile, dimensions, 2);
-		vector<vector<double> > equationMatrix, transposedMatrix, AonATransposed, z(sqaredGridPointsAmount, vector<double>(1, 0)), tempMatrix1,tempMatrix2, b(sqaredGridPointsAmount, vector<double>(1, 0));
-
-
-		calculateMatrix(equationMatrix);
-		transpose(equationMatrix, transposedMatrix);
-		//parallelMultiplicate(equationMatrix, transposedMatrix, AonATransposed);
-		parallelMultiplicate(equationMatrix, z, tempMatrix1);
+		readDataFile(rightPartFile, dimensions, 2, b);
+		equationSolver();
+	}
+	
+	void equationSolver()
+	{
+		vector<vector<double> > A, ATransposed, AonATransposed, ATranspozedOnB;
+		vector<vector<double> > z(sqaredGridPointsAmount, vector<double>(1, 0)), tempMatrix1, tempMatrix2;
+		double numerator, denominator;
+		calculateMatrix(A);
+		transpose(A, ATransposed);
+		parallelMultiplicate(A, ATransposed, AonATransposed);
+		parallelMultiplicate(ATransposed, b, ATranspozedOnB);
 		double normB = vectorNorm(b);
-		subtraction(tempMatrix1, b, tempMatrix2);
-		int iterationNumber = 0;
-		double stoppingPoint = vectorNorm(tempMatrix2) / normB;
-			while (stoppingPoint >= myEpsilon)
-			{
 
-				iterationNumber++;
-				cout << iterationNumber;
-			}
-				//multiplicate(equationMatrix, transposedMatrix, AonATransposed);
+		parallelMultiplicate(A, z, tempMatrix1);
+		subtraction(tempMatrix1, b, tempMatrix2);
+		double stoppingPoint = vectorNorm(tempMatrix2) / normB;
+
+		int iterationNumber = 0;
+		while (stoppingPoint >= myEpsilon)
+		{
+			iterationNumber++;
+			parallelMultiplicate(AonATransposed, z, tempMatrix1);
+			subtraction(tempMatrix1, ATranspozedOnB, tempMatrix2);
+			numerator = pow(vectorNorm(tempMatrix2),2);
+			//numerator = numerator*numerator;
+
+			parallelMultiplicate(A, tempMatrix2, tempMatrix1);
+			denominator = pow(vectorNorm(tempMatrix1),2);
+			//denominator = denominator*denominator;
+
+			parallelMultiplicate(A, z, tempMatrix1);
+			subtraction(tempMatrix1, b, tempMatrix2);
+			parallelMultiplicate(ATransposed, tempMatrix2, tempMatrix1);
+			multiplicate(tempMatrix1, numerator / denominator, tempMatrix2);
+			subtraction(z, tempMatrix2, tempMatrix1);
+			z = tempMatrix1;//тонкое место
+
+			parallelMultiplicate(A, z, tempMatrix1);
+			subtraction(tempMatrix1, b, tempMatrix2);
+			stoppingPoint = vectorNorm(tempMatrix2) / normB;
+			if (iterationNumber%100==0)
+				cout <<iterationNumber<<") "<< stoppingPoint << endl;
+		}
+		cout << iterationNumber << endl;
+	}
+
+	void testMethod(vector<vector<double> > &test)
+	{
+		vector<vector<double> > vect(2, vector<double>(1,2));
+		swap(test, vect);
 	}
 
 	void transpose(vector<vector<double> > &inputMatrix, vector<vector<double> > &result)
@@ -124,7 +159,7 @@ public:
 	}
 
 
-	void readBFile(string fileName, int dimensions, int targetCollar)
+	vector<vector<double> > readBFile(string fileName, int dimensions, int targetCollar)
 	{
 		b = vector<vector<double> >(sqaredGridPointsAmount, vector<double>(1));
 		ifstream  myFile;
@@ -141,7 +176,8 @@ public:
 			}
 		}
 		myFile.close();
-		return;
+		
+		return b;
 
 	}
 
@@ -182,11 +218,10 @@ public:
 			}
 		}
 		myFile.close();
-		result.swap(tmpVector);
+		swap(tmpVector,result);
 		std::cout << "pew" << endl;
 		
 	}
-
 
 	void calculateMatrix(vector<vector<double> > &result)
 	{
@@ -220,6 +255,8 @@ public:
 int main(int argc, char* argv[])
 {
 	MPI_Init(&argc, &argv);
+
+
 	steady_clock::time_point t1 = steady_clock::now();
 	GravimetryTask g("hh1.dat", "hh2.dat", "f_1sq.dat");
 	steady_clock::time_point t2 = steady_clock::now();
