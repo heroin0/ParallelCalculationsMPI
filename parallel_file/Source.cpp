@@ -33,7 +33,7 @@ public:
 		gravityConst = 6.6708e-3;// 6.67408e-11;
 		gridPointsAmount = 50;
 		sqaredGridPointsAmount = 2500;//константные переменные класса
-		myEpsilon = 0.000001;
+		myEpsilon = 0.01;
 		const int dimensions = 3;
 
 		readDataFile(firstSurfaceFile, dimensions, firstSurfacePoints);
@@ -57,6 +57,7 @@ public:
 		subtraction(tempMatrix1, b, tempMatrix2);
 		double stoppingPoint = vectorNorm(tempMatrix2) / normB;
 
+		
 		int iterationNumber = 0;
 		while (stoppingPoint >= myEpsilon)
 		{
@@ -64,18 +65,16 @@ public:
 			parallelMultiplicate(AonATransposed, z, tempMatrix1);
 			subtraction(tempMatrix1, ATranspozedOnB, tempMatrix2);
 			numerator = pow(vectorNorm(tempMatrix2),2);
-			//numerator = numerator*numerator;
 
 			parallelMultiplicate(A, tempMatrix2, tempMatrix1);
 			denominator = pow(vectorNorm(tempMatrix1),2);
-			//denominator = denominator*denominator;
 
 			parallelMultiplicate(A, z, tempMatrix1);
 			subtraction(tempMatrix1, b, tempMatrix2);
 			parallelMultiplicate(ATransposed, tempMatrix2, tempMatrix1);
 			multiplicate(tempMatrix1, numerator / denominator, tempMatrix2);
 			subtraction(z, tempMatrix2, tempMatrix1);
-			z = tempMatrix1;//тонкое место
+			z = tempMatrix1;
 
 			parallelMultiplicate(A, z, tempMatrix1);
 			subtraction(tempMatrix1, b, tempMatrix2);
@@ -84,12 +83,17 @@ public:
 				cout <<iterationNumber<<") "<< stoppingPoint << endl;
 		}
 		cout << iterationNumber << endl;
+		printZ(z, "my_out.dat");
 	}
 
-	void testMethod(vector<vector<double> > &test)
+	void printZ(vector<vector<double> > z, string fileName)
 	{
-		vector<vector<double> > vect(2, vector<double>(1,2));
-		swap(test, vect);
+		ofstream myFile;
+		myFile.open(fileName.c_str());
+			for (int i = 0; i < gridPointsAmount; i++)
+				for (int j = 0; j < gridPointsAmount; j++)
+					myFile << firstSurfacePoints[i][j][0] << " " << firstSurfacePoints[i][j][1] << " " << z[i + j*gridPointsAmount][0] << "\n";
+			myFile.close();
 	}
 
 	void transpose(vector<vector<double> > &inputMatrix, vector<vector<double> > &result)
@@ -156,29 +160,6 @@ public:
 			for (int j = 0; j < n; j++)
 				tmpVector[i][j] = matrix[i][j] * number;
 		swap(result, tmpVector);
-	}
-
-
-	vector<vector<double> > readBFile(string fileName, int dimensions, int targetCollar)
-	{
-		b = vector<vector<double> >(sqaredGridPointsAmount, vector<double>(1));
-		ifstream  myFile;
-		double dump;
-		myFile.open(fileName.c_str());
-		for (int i = 0; i < sqaredGridPointsAmount; i++)
-		{
-			for (int j = 0; j < dimensions && (!myFile.eof()); j++)
-			{
-				if (j == targetCollar)
-					myFile >> b[i][0];
-				else
-					myFile >> dump;
-			}
-		}
-		myFile.close();
-		
-		return b;
-
 	}
 
 	void readDataFile(string fileName, int dimensions, vector<vector<vector<double> > > &result)
