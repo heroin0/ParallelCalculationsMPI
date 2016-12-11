@@ -251,3 +251,5 @@ paket-files/
 .idea/
 *.sln.iml
 /parallel_file/Source2.cpp
+/parallel_file/ReleaseMPI/parallel_file.tlog
+/ReleaseMPI
